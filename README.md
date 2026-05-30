@@ -11,7 +11,6 @@ Infrastructure complète open-source pour opérateur mobile insulaire :
 
 | Fichier | Contenu |
 |---|---|
-| `PROMPTS_LIST.md` | 27 prompts d'installation — ordre strict à respecter |
 | `OSMO_EPDG_BUILD_DEPLOY.md` | Compilation et déploiement strongSwan fork Osmocom + osmo-epdg Erlang |
 | `osmocom_open5gs_complet_v2.docx` | Document de synthèse — stack Osmocom 2G + Open5GS 4G complète |
 | `vowifi_stack_doc.docx` | Stack VoWiFi : strongSwan, osmo-epdg, Kamailio IMS |
