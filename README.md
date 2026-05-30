@@ -8,8 +8,7 @@ Infrastructure complète open-source pour opérateur mobile insulaire :
 ## Par où commencer
 
 Lire **`PROMPTS_LIST.md`** — il contient les 27 prompts d'installation dans l'ordre strict,
-organisés en 8 phases. Chaque prompt est conçu pour une conversation séparée avec Claude.
-
+organisés en 8 phases. 
 ---
 
 ## Fichiers de ce dépôt
