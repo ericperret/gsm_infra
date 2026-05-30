@@ -1,0 +1,792 @@
+**INSTALLATION OSMOCOM 2G + OPEN5GS 4G LTE**
+
+Ubuntu 24.04 LTS x86_64  |  IP : 10.0.0.1  |  MCC : 547
+
+*Document de synthese complet — Mai 2026*
+
+Version 2.0  |  MNC = PLACEHOLDER  |  ARFCN = PLACEHOLDER
+
+# **PARTIE 1 — OSMOCOM 2G**
+
+## **Etape 1/6 — Mise a jour systeme + depot sysmocom + dependances**
+
+### **Bloc 1 — Mise a jour systeme**
+
+| sudo apt update && sudo apt upgrade -y |
+| --- |
+
+### **Bloc 2 — Prerequis depot**
+
+| sudo apt install -y \ |
+| --- |
+| wget curl gnupg2 ca-certificates \ |
+| apt-transport-https software-properties-common \ |
+| lsb-release |
+
+### **Bloc 3 — Cle GPG sysmocom**
+
+| wget -qO - https://downloads.osmocom.org/packages/osmocom:/latest/xUbuntu_24.04/Release.key \ |
+| --- |
+| │ gpg --dearmor \ |
+| │ sudo tee /usr/share/keyrings/osmocom-latest.gpg > /dev/null |
+
+### **Bloc 4 — Ajout depot sysmocom**
+
+| echo "deb [signed-by=/usr/share/keyrings/osmocom-latest.gpg] \ |
+| --- |
+| https://downloads.osmocom.org/packages/osmocom:/latest/xUbuntu_24.04/ ./" \ |
+| │ sudo tee /etc/apt/sources.list.d/osmocom-latest.list |
+
+### **Bloc 5 — Verification depot**
+
+| sudo apt update 2>&1 │ grep -E "osmocom│Err│Hit│Get" |
+| --- |
+| apt-cache policy │ grep osmocom |
+
+**Note : ***Resultat attendu : ligne downloads.osmocom.org avec code 500*
+
+## **Etape 2/6 — Installation paquets coeur 2G**
+
+| sudo apt install -y osmo-stp |
+| --- |
+| sudo apt install -y osmo-hlr |
+| sudo apt install -y osmo-mgw |
+| sudo apt install -y osmo-msc |
+| sudo apt install -y osmo-sgsn |
+| sudo apt install -y osmo-bsc |
+| sudo apt install -y osmo-cbc |
+
+### **Verification — 7 paquets**
+
+| dpkg -l osmo-stp osmo-hlr osmo-mgw osmo-msc osmo-sgsn osmo-bsc osmo-cbc \ |
+| --- |
+| │ awk '/^[ih]i/{print $2, $3}' │ column -t |
+
+## **Etape 3/6 — Fichiers de configuration (MCC=547)**
+
+### **Bloc 0 — Repertoires**
+
+| sudo mkdir -p /etc/osmocom /var/lib/osmocom |
+| --- |
+
+### **Bloc 1 — osmo-stp.cfg**
+
+| sudo tee /etc/osmocom/osmo-stp.cfg > /dev/null << 'EOF' |
+| --- |
+| ! OsmoSTP  MCC=547  MNC=PLACEHOLDER |
+| line vty |
+| no login |
+| bind 127.0.0.1 |
+| cs7 instance 0 |
+| description OsmoSTP-547-PLACEHOLDER |
+| point-code 0.23.1 |
+| listen m3ua 2905 |
+| accept-asp-connections |
+| local-ip 10.0.0.1 |
+| EOF |
+
+### **Bloc 2 — osmo-hlr.cfg**
+
+| sudo tee /etc/osmocom/osmo-hlr.cfg > /dev/null << 'EOF' |
+| --- |
+| ! OsmoHLR  MCC=547  MNC=PLACEHOLDER |
+| line vty |
+| no login |
+| bind 127.0.0.1 |
+| hlr |
+| database /var/lib/osmocom/hlr.db |
+| gsup |
+| bind ip 10.0.0.1 |
+| bind port 4222 |
+| EOF |
+
+### **Bloc 3 — osmo-mgw.cfg**
+
+| sudo tee /etc/osmocom/osmo-mgw.cfg > /dev/null << 'EOF' |
+| --- |
+| ! OsmoMGW  MCC=547  MNC=PLACEHOLDER |
+| line vty |
+| no login |
+| bind 127.0.0.1 |
+| mgcp |
+| bind ip 10.0.0.1 |
+| rtp bind-ip 10.0.0.1 |
+| rtp port-range 16000 16999 |
+| number endpoints 31 |
+| EOF |
+
+### **Bloc 4 — osmo-msc.cfg**
+
+| sudo tee /etc/osmocom/osmo-msc.cfg > /dev/null << 'EOF' |
+| --- |
+| ! OsmoMSC  MCC=547  MNC=PLACEHOLDER |
+| line vty |
+| no login |
+| bind 127.0.0.1 |
+| network |
+| network country code 547 |
+| mobile network code PLACEHOLDER |
+| short name OsmoNet |
+| long name OsmoNet |
+| msc |
+| mgw remote-ip 10.0.0.1 |
+| mgw remote-port 2427 |
+| mgw reset-endpoint rtpbridge/*@mgw |
+| hlr |
+| remote-ip 10.0.0.1 |
+| remote-port 4222 |
+| cs7 instance 0 |
+| point-code 0.23.3 |
+| asp asp-clnt-msc 2905 0 m3ua |
+| remote-ip 10.0.0.1 |
+| role asp |
+| sctp-role client |
+| as as-clnt-msc m3ua |
+| asp asp-clnt-msc |
+| routing-key 2 0.23.3 |
+| EOF |
+
+### **Bloc 5 — osmo-sgsn.cfg**
+
+| sudo tee /etc/osmocom/osmo-sgsn.cfg > /dev/null << 'EOF' |
+| --- |
+| ! OsmoSGSN  MCC=547  MNC=PLACEHOLDER |
+| line vty |
+| no login |
+| bind 127.0.0.1 |
+| sgsn |
+| network country code 547 |
+| mobile network code PLACEHOLDER |
+| gtp local-ip 10.0.0.1 |
+| auth-policy accept-all |
+| ggsn 0 |
+| remote-ip 10.0.0.1 |
+| gtp-version 1 |
+| no shutdown |
+| ns |
+| bind udp nse-main |
+| listen 10.0.0.1 23000 |
+| EOF |
+
+### **Bloc 6 — osmo-bsc.cfg (base)**
+
+| sudo tee /etc/osmocom/osmo-bsc.cfg > /dev/null << 'EOF' |
+| --- |
+| ! OsmoBSC  MCC=547  MNC=PLACEHOLDER |
+| line vty |
+| no login |
+| bind 127.0.0.1 |
+| network |
+| network country code 547 |
+| mobile network code PLACEHOLDER |
+| short name OsmoNet |
+| long name OsmoNet |
+| cs7 instance 0 |
+| point-code 0.23.2 |
+| asp asp-clnt-bsc 2905 0 m3ua |
+| remote-ip 10.0.0.1 |
+| role asp |
+| sctp-role client |
+| as as-clnt-bsc m3ua |
+| asp asp-clnt-bsc |
+| routing-key 1 0.23.2 |
+| msc 0 |
+| msc-addr 10.0.0.1 |
+| codec-list fr1 |
+| EOF |
+
+### **Bloc 7 — osmo-cbc.cfg**
+
+| sudo tee /etc/osmocom/osmo-cbc.cfg > /dev/null << 'EOF' |
+| --- |
+| ! OsmoCBC  MCC=547  MNC=PLACEHOLDER |
+| line vty |
+| no login |
+| bind 127.0.0.1 |
+| cbc |
+| server |
+| local-ip 10.0.0.1 |
+| local-port 4264 |
+| EOF |
+
+### **Verification — 7 fichiers**
+
+| for f in osmo-stp osmo-hlr osmo-mgw osmo-msc osmo-sgsn osmo-bsc osmo-cbc; do |
+| --- |
+| echo -n "$f.cfg : " |
+| wc -l /etc/osmocom/$f.cfg │ awk '{print $1, "lignes"}' |
+| done |
+
+## **Etape 4/6 — Services systemd Osmocom : enable + start**
+
+| sudo systemctl enable osmo-stp  && sudo systemctl start osmo-stp |
+| --- |
+| systemctl is-active osmo-stp  && echo 'OK' ││ echo 'FAIL' |
+|  |
+| sudo systemctl enable osmo-hlr  && sudo systemctl start osmo-hlr |
+| systemctl is-active osmo-hlr  && echo 'OK' ││ echo 'FAIL' |
+|  |
+| sudo systemctl enable osmo-mgw  && sudo systemctl start osmo-mgw |
+| systemctl is-active osmo-mgw  && echo 'OK' ││ echo 'FAIL' |
+|  |
+| sudo systemctl enable osmo-msc  && sudo systemctl start osmo-msc |
+| systemctl is-active osmo-msc  && echo 'OK' ││ echo 'FAIL' |
+|  |
+| sudo systemctl enable osmo-sgsn && sudo systemctl start osmo-sgsn |
+| systemctl is-active osmo-sgsn && echo 'OK' ││ echo 'FAIL' |
+|  |
+| sudo systemctl enable osmo-bsc  && sudo systemctl start osmo-bsc |
+| systemctl is-active osmo-bsc  && echo 'OK' ││ echo 'FAIL' |
+|  |
+| sudo systemctl enable osmo-cbc  && sudo systemctl start osmo-cbc |
+| systemctl is-active osmo-cbc  && echo 'OK' ││ echo 'FAIL' |
+
+### **Verification globale**
+
+| for svc in osmo-stp osmo-hlr osmo-mgw osmo-msc osmo-sgsn osmo-bsc osmo-cbc; do |
+| --- |
+| state=$(systemctl is-active $svc) |
+| enabled=$(systemctl is-enabled $svc) |
+| printf '%-12s  actif=%-10s  enabled=%s\n' "$svc" "$state" "$enabled" |
+| done |
+
+### **Diagnostic si un service est en failed**
+
+| sudo journalctl -u osmo-NOM.service -n 30 --no-pager |
+| --- |
+
+## **Etape 5/6 — OsmoBSC : sysmoBTS 2100, Abis-over-IP, 3 secteurs 120 degres**
+
+### **Bloc 1 — Sauvegarde**
+
+| sudo cp /etc/osmocom/osmo-bsc.cfg /etc/osmocom/osmo-bsc.cfg.bak |
+| --- |
+
+### **Bloc 2 — Config complete 3 secteurs**
+
+| sudo tee /etc/osmocom/osmo-bsc.cfg > /dev/null << 'EOF' |
+| --- |
+| ! OsmoBSC sysmoBTS 2100 - Abis-over-IP - 3 secteurs 120 degres |
+| ! MCC=547  MNC=PLACEHOLDER |
+| line vty |
+| no login |
+| bind 127.0.0.1 |
+| network |
+| network country code 547 |
+| mobile network code PLACEHOLDER |
+| short name OsmoNet |
+| long name OsmoNet |
+| auth policy closed |
+| encryption a5 0 |
+| neci 1 |
+| mm info 1 |
+| cs7 instance 0 |
+| point-code 0.23.2 |
+| asp asp-clnt-bsc 2905 0 m3ua |
+| remote-ip 10.0.0.1 |
+| role asp |
+| sctp-role client |
+| as as-clnt-bsc m3ua |
+| asp asp-clnt-bsc |
+| routing-key 1 0.23.2 |
+| msc 0 |
+| msc-addr 10.0.0.1 |
+| codec-list fr1 |
+| ! --- BTS 0 Secteur 1 Az0 --- |
+| bts 0 |
+| type sysmobts |
+| band PLACEHOLDER_BAND |
+| description Secteur-1-Az0 |
+| location_area_code 1 / cell_identity 1 |
+| base_station_id_code 0 |
+| oml remote-ip 10.0.0.1 |
+| gprs mode gprs / gprs cell bvci 2 |
+| gprs nsvc 0 remote ip 10.0.0.1 |
+| gprs nsvc 0 remote udp port 23000 |
+| gprs nsvc 0 local udp port 23000 |
+| gprs nsvc 0 nsvci 1 |
+| trx 0 |
+| arfcn PLACEHOLDER_ARFCN_S1 |
+| nominal power PLACEHOLDER_PWR_DBM |
+| timeslot 0 : CCCH+SDCCH4 |
+| timeslot 1 : SDCCH8 |
+| timeslots 2-7 : TCH/F |
+| ! --- BTS 1 Secteur 2 Az120 --- (meme structure bvci=3 nsvc=23001 nsvci=2) |
+| ! --- BTS 2 Secteur 3 Az240 --- (meme structure bvci=4 nsvc=23002 nsvci=3) |
+| EOF |
+
+### **Bloc 3 — Redemarrage + verification**
+
+| sudo systemctl restart osmo-bsc |
+| --- |
+| sleep 2 |
+| systemctl is-active osmo-bsc && echo 'OK' ││ echo 'FAIL' |
+
+### **PLACEHOLDERs BSC**
+
+| **Placeholder** | **Valeur a fournir** |
+| --- | --- |
+| PLACEHOLDER_BAND | ex: DCS1800 ou GSM900 |
+| PLACEHOLDER_ARFCN_S1 | ARFCN secteur 1 (autorite) |
+| PLACEHOLDER_ARFCN_S2 | ARFCN secteur 2 (autorite) |
+| PLACEHOLDER_ARFCN_S3 | ARFCN secteur 3 (autorite) |
+| PLACEHOLDER_PWR_DBM | Puissance TRX en dBm ex: 23 |
+| PLACEHOLDER (MNC) | Mobile Network Code ex: 10 |
+
+## **Etape 6/6 — Verification communications + readiness sysmoBTS**
+
+### **Etat global + ports**
+
+| for svc in osmo-stp osmo-hlr osmo-mgw osmo-msc osmo-sgsn osmo-bsc osmo-cbc; do |
+| --- |
+| printf '%-12s  %s\n' "$svc" "$(systemctl is-active $svc)" |
+| done |
+|  |
+| sudo ss -tlnpu │ grep -E 'osmo│4222│2905│2427│4264│3003│23000' \ |
+| │ awk '{print $1, $5, $7}' │ column -t |
+
+### **VTY actif sur chaque composant**
+
+| for port in 4239 4258 2427 4254 4245 4242 4264; do |
+| --- |
+| result=$(echo '' │ nc -w1 127.0.0.1 $port 2>/dev/null │ head -1) |
+| [ -n "$result" ] && echo "OK $port" ││ echo "FAIL $port" |
+| done |
+
+### **Firewall port Abis 3003**
+
+| sudo ufw allow 3003/tcp comment 'Abis-over-IP sysmoBTS' |
+| --- |
+| sudo ufw allow 3003/udp comment 'Abis-over-IP sysmoBTS' |
+| sudo ufw status │ grep 3003 |
+
+### **Readiness check final Osmocom**
+
+| echo '===== OSMOCOM READINESS CHECK =====' |
+| --- |
+| ok=0 |
+| for svc in osmo-stp osmo-hlr osmo-mgw osmo-msc osmo-sgsn osmo-bsc osmo-cbc; do |
+| [ "$(systemctl is-active $svc)" = 'active' ] && ok=$((ok+1)) |
+| done |
+| echo "Services actifs : $ok/7" |
+| sudo ss -tlnp │ grep -q 3003 && echo 'Port 3003 : OUVERT' ││ echo 'Port 3003 : FERME' |
+| sudo ss -tlnp │ grep -q 4222 && echo 'Port 4222 : OUVERT' ││ echo 'Port 4222 : FERME' |
+| sudo ss -tlnp │ grep -q 2905 && echo 'Port 2905 : OUVERT' ││ echo 'Port 2905 : FERME' |
+| count=$(grep -c 'description Secteur' /etc/osmocom/osmo-bsc.cfg) |
+| echo "Secteurs declares : $count/3" |
+| echo '===================================' |
+
+### **Surveillance connexion BTS en temps reel**
+
+| sudo journalctl -u osmo-bsc -f │ grep -E 'OML│BTS│TRX│RSL│connect' |
+| --- |
+
+# **PARTIE 2 — OPEN5GS 4G LTE**
+
+## **Etape 1/5 — Depot Open5GS + installation 16 composants**
+
+### **Cle GPG + depot**
+
+| sudo apt install -y gnupg curl wget ca-certificates apt-transport-https |
+| --- |
+|  |
+| curl -fsSL https://download.opensuse.org/repositories/home:/acetcom/xUbuntu_24.04/Release.key \ |
+| │ gpg --dearmor \ |
+| │ sudo tee /usr/share/keyrings/open5gs.gpg > /dev/null |
+|  |
+| echo "deb [signed-by=/usr/share/keyrings/open5gs.gpg] \ |
+| https://download.opensuse.org/repositories/home:/acetcom/xUbuntu_24.04/ ./" \ |
+| │ sudo tee /etc/apt/sources.list.d/open5gs.list |
+|  |
+| sudo apt update 2>&1 │ grep -E "open5gs│acetcom│Err" |
+
+### **Installation 16 composants**
+
+| sudo apt install -y \ |
+| --- |
+| open5gs-mme  open5gs-sgwc open5gs-sgwu \ |
+| open5gs-smf  open5gs-upf  open5gs-hss  \ |
+| open5gs-pcrf open5gs-nrf  open5gs-scp  \ |
+| open5gs-ausf open5gs-udm  open5gs-udr  \ |
+| open5gs-pcf  open5gs-nssf open5gs-bsf  \ |
+| open5gs-amf |
+
+### **Verification — 16 paquets**
+
+| dpkg -l open5gs-mme open5gs-sgwc open5gs-sgwu open5gs-smf open5gs-upf \ |
+| --- |
+| open5gs-hss open5gs-pcrf open5gs-nrf open5gs-scp open5gs-ausf \ |
+| open5gs-udm open5gs-udr open5gs-pcf open5gs-nssf open5gs-bsf open5gs-amf \ |
+| │ awk '/^[ih]i/{print $2, $3}' │ column -t |
+
+## **Etape 2/5 — Configuration MME, SGW, PGW, HSS, PCRF**
+
+### **Sauvegarde**
+
+| sudo mkdir -p /etc/open5gs/backup |
+| --- |
+| sudo cp /etc/open5gs/*.yaml /etc/open5gs/backup/ |
+
+### **mme.yaml**
+
+| sudo tee /etc/open5gs/mme.yaml > /dev/null << 'EOF' |
+| --- |
+| # Open5GS MME  MCC=547  MNC=PLACEHOLDER  IP=PLACEHOLDER_IP |
+| logger: |
+| file: { path: /var/log/open5gs/mme.log } |
+| level: info |
+| mme: |
+| s1ap: |
+| server: [ { address: PLACEHOLDER_IP } ] |
+| gtpc: |
+| server: [ { address: PLACEHOLDER_IP } ] |
+| client: |
+| sgwc: [ { address: PLACEHOLDER_IP } ] |
+| gummei: |
+| - plmn_id: { mcc: '547', mnc: 'PLACEHOLDER' } |
+| mme_gid: 1 |
+| mme_code: 1 |
+| tai: |
+| - plmn_id: { mcc: '547', mnc: 'PLACEHOLDER' } |
+| tac: 1 |
+| security: |
+| integrity_order: [ EIA2, EIA1, EIA0 ] |
+| ciphering_order: [ EEA0, EEA1, EEA2 ] |
+| network_name: { full: OsmoNet, short: ONet } |
+| mme_name: open5gs-mme0 |
+| EOF |
+
+### **sgwc.yaml**
+
+| sudo tee /etc/open5gs/sgwc.yaml > /dev/null << 'EOF' |
+| --- |
+| # Open5GS SGW-C  IP=PLACEHOLDER_IP |
+| logger: |
+| file: { path: /var/log/open5gs/sgwc.log } |
+| level: info |
+| sgwc: |
+| gtpc: |
+| server: [ { address: PLACEHOLDER_IP } ] |
+| pfcp: |
+| server: [ { address: PLACEHOLDER_IP } ] |
+| client: |
+| sgwu: [ { address: PLACEHOLDER_IP } ] |
+| EOF |
+
+### **sgwu.yaml**
+
+| sudo tee /etc/open5gs/sgwu.yaml > /dev/null << 'EOF' |
+| --- |
+| # Open5GS SGW-U  IP=PLACEHOLDER_IP |
+| logger: |
+| file: { path: /var/log/open5gs/sgwu.log } |
+| level: info |
+| sgwu: |
+| pfcp: |
+| server: [ { address: PLACEHOLDER_IP } ] |
+| client: |
+| sgwc: [ { address: PLACEHOLDER_IP } ] |
+| gtpu: |
+| server: [ { address: PLACEHOLDER_IP } ] |
+| EOF |
+
+### **smf.yaml (PGW-C)**
+
+| sudo tee /etc/open5gs/smf.yaml > /dev/null << 'EOF' |
+| --- |
+| # Open5GS SMF/PGW-C  IP=PLACEHOLDER_IP |
+| logger: |
+| file: { path: /var/log/open5gs/smf.log } |
+| level: info |
+| smf: |
+| gtpc: |
+| server: [ { address: PLACEHOLDER_IP } ] |
+| gtpu: |
+| server: [ { address: PLACEHOLDER_IP } ] |
+| pfcp: |
+| server: [ { address: PLACEHOLDER_IP } ] |
+| client: |
+| upf: [ { address: PLACEHOLDER_IP } ] |
+| subnet: |
+| - addr: 10.45.0.1/16 |
+| dnn: internet |
+| dns: [ 8.8.8.8, 8.8.4.4 ] |
+| mtu: 1400 |
+| EOF |
+
+### **upf.yaml (PGW-U)**
+
+| sudo tee /etc/open5gs/upf.yaml > /dev/null << 'EOF' |
+| --- |
+| # Open5GS UPF/PGW-U  IP=PLACEHOLDER_IP |
+| logger: |
+| file: { path: /var/log/open5gs/upf.log } |
+| level: info |
+| upf: |
+| pfcp: |
+| server: [ { address: PLACEHOLDER_IP } ] |
+| client: |
+| smf: [ { address: PLACEHOLDER_IP } ] |
+| gtpu: |
+| server: [ { address: PLACEHOLDER_IP } ] |
+| subnet: |
+| - addr: 10.45.0.1/16 |
+| dnn: internet |
+| dev: ogstun |
+| EOF |
+
+### **hss.yaml**
+
+| sudo tee /etc/open5gs/hss.yaml > /dev/null << 'EOF' |
+| --- |
+| # Open5GS HSS  IP=PLACEHOLDER_IP |
+| logger: |
+| file: { path: /var/log/open5gs/hss.log } |
+| level: info |
+| db_uri: mongodb://localhost/open5gs |
+| hss: |
+| freeDiameter: |
+| identity: hss.localdomain |
+| realm: localdomain |
+| listen_on: PLACEHOLDER_IP |
+| no_sctp: true |
+| connect: |
+| - identity: mme.localdomain |
+| addr: PLACEHOLDER_IP |
+| EOF |
+
+### **pcrf.yaml**
+
+| sudo tee /etc/open5gs/pcrf.yaml > /dev/null << 'EOF' |
+| --- |
+| # Open5GS PCRF  IP=PLACEHOLDER_IP |
+| logger: |
+| file: { path: /var/log/open5gs/pcrf.log } |
+| level: info |
+| pcrf: |
+| freeDiameter: |
+| identity: pcrf.localdomain |
+| realm: localdomain |
+| listen_on: PLACEHOLDER_IP |
+| no_sctp: true |
+| connect: |
+| - identity: smf.localdomain |
+| addr: PLACEHOLDER_IP |
+| EOF |
+
+### **Interface TUN ogstun**
+
+| sudo ip tuntap add name ogstun mode tun |
+| --- |
+| sudo ip addr add 10.45.0.1/16 dev ogstun |
+| sudo ip addr add 2001:db8:cafe::1/48 dev ogstun |
+| sudo ip link set ogstun up |
+| ip addr show ogstun |
+
+### **Persistance ogstun au reboot**
+
+| sudo tee /etc/systemd/network/99-ogstun.netdev > /dev/null << 'EOF' |
+| --- |
+| [NetDev] |
+| Name=ogstun |
+| Kind=tun |
+| EOF |
+|  |
+| sudo tee /etc/systemd/network/99-ogstun.network > /dev/null << 'EOF' |
+| [Match] |
+| Name=ogstun |
+| [Address] |
+| Address=10.45.0.1/16 |
+| [Address] |
+| Address=2001:db8:cafe::1/48 |
+| EOF |
+
+## **Etape 3/5 — HSS + MongoDB + abonne test IMSI=340041000088687**
+
+### **Bloc 1 — MongoDB : cle GPG + depot + installation**
+
+| curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc \ |
+| --- |
+| │ gpg --dearmor \ |
+| │ sudo tee /usr/share/keyrings/mongodb-server-7.0.gpg > /dev/null |
+|  |
+| echo "deb [signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg] \ |
+| https://repo.mongodb.org/apt/ubuntu noble/mongodb-org/7.0 multiverse" \ |
+| │ sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list |
+|  |
+| sudo apt update && sudo apt install -y mongodb-org |
+
+### **Bloc 2 — Demarrage MongoDB**
+
+| sudo systemctl enable mongod && sudo systemctl start mongod |
+| --- |
+| sleep 2 |
+| systemctl is-active mongod && echo 'OK' ││ echo 'FAIL' |
+
+### **Bloc 3 — Demarrage HSS**
+
+| sudo systemctl enable open5gs-hssd && sudo systemctl start open5gs-hssd |
+| --- |
+| sleep 2 |
+| systemctl is-active open5gs-hssd && echo 'OK' ││ echo 'FAIL' |
+
+### **Bloc 4 — Creation abonne test IMSI=340041000088687**
+
+| # Remplacer Ki et OPc par les valeurs SIM reelles |
+| --- |
+| open5gs-dbctl add 340041000088687 PLACEHOLDER_KI PLACEHOLDER_OPC |
+
+### **Bloc 5 — Parametres abonne APN/QoS**
+
+| open5gs-dbctl update 340041000088687 \ |
+| --- |
+| --apn internet \ |
+| --ambr-downlink 1000000000 \ |
+| --ambr-uplink 1000000000 \ |
+| --qos-index 9 \ |
+| --arp-priority 8 |
+
+### **Verification**
+
+| systemctl is-active open5gs-hssd |
+| --- |
+| systemctl is-active mongod |
+| open5gs-dbctl showfiltered 340041000088687 |
+| sudo ss -tlnp │ grep 3868 │ column -t |
+
+**Note : ***MongoDB est obligatoire pour Open5GS HSS/UDR — cohabite sans conflit avec PostgreSQL*
+
+## **Etape 4/5 — Services systemd Open5GS : enable + start dans l****'****ordre**
+
+| sudo systemctl enable mongod          && sudo systemctl start mongod |
+| --- |
+| systemctl is-active mongod          && echo 'OK' ││ echo 'FAIL' |
+|  |
+| sudo systemctl enable open5gs-hssd   && sudo systemctl start open5gs-hssd |
+| systemctl is-active open5gs-hssd   && echo 'OK' ││ echo 'FAIL' |
+|  |
+| sudo systemctl enable open5gs-pcrfd  && sudo systemctl start open5gs-pcrfd |
+| systemctl is-active open5gs-pcrfd  && echo 'OK' ││ echo 'FAIL' |
+|  |
+| sudo systemctl enable open5gs-sgwcd  && sudo systemctl start open5gs-sgwcd |
+| systemctl is-active open5gs-sgwcd  && echo 'OK' ││ echo 'FAIL' |
+|  |
+| sudo systemctl enable open5gs-sgwud  && sudo systemctl start open5gs-sgwud |
+| systemctl is-active open5gs-sgwud  && echo 'OK' ││ echo 'FAIL' |
+|  |
+| sudo systemctl enable open5gs-smfd   && sudo systemctl start open5gs-smfd |
+| systemctl is-active open5gs-smfd   && echo 'OK' ││ echo 'FAIL' |
+|  |
+| sudo systemctl enable open5gs-upfd   && sudo systemctl start open5gs-upfd |
+| systemctl is-active open5gs-upfd   && echo 'OK' ││ echo 'FAIL' |
+|  |
+| sudo systemctl enable open5gs-mmed   && sudo systemctl start open5gs-mmed |
+| systemctl is-active open5gs-mmed   && echo 'OK' ││ echo 'FAIL' |
+
+### **Verification globale**
+
+| for svc in mongod open5gs-hssd open5gs-pcrfd open5gs-sgwcd \ |
+| --- |
+| open5gs-sgwud open5gs-smfd open5gs-upfd open5gs-mmed; do |
+| state=$(systemctl is-active $svc) |
+| enabled=$(systemctl is-enabled $svc 2>/dev/null) |
+| printf '%-22s  actif=%-10s  enabled=%s\n' "$svc" "$state" "$enabled" |
+| done |
+
+### **Diagnostic si un service est en failed**
+
+| sudo journalctl -u open5gs-NOM.service -n 30 --no-pager |
+| --- |
+
+## **Etape 5/5 — Verification ports + connectivite + readiness eNodeB**
+
+### **Bloc 1 — Ports critiques**
+
+| sudo ss -tlnpu │ grep -E '36412│2123│2152│3868│8805│2427' \ |
+| --- |
+| │ awk '{print $1, $5, $7}' │ column -t |
+
+### **Table des ports Open5GS**
+
+| **Port / Proto** | **Composant** |
+| --- | --- |
+| 36412 SCTP | MME — S1AP vers eNodeB |
+| 2123 UDP | SGW-C — GTP-C S11 |
+| 2152 UDP | SGW-U — GTP-U S1-U |
+| 3868 TCP | HSS — Diameter S6a |
+| 8805 UDP | SGW-C <-> SGW-U PFCP |
+
+### **Bloc 2 — Connectivite MME ****<****-****>**** HSS**
+
+| sudo journalctl -u open5gs-mmed -n 30 --no-pager \ |
+| --- |
+| │ grep -E 'S6A│Diameter│HSS│CONNECTED│ERROR' |
+|  |
+| sudo journalctl -u open5gs-hssd -n 30 --no-pager \ |
+| │ grep -E 'S6A│Diameter│MME│CONNECTED│ERROR' |
+
+### **Bloc 3 — Connectivite SGW-C ****<****-****>**** SGW-U et SMF ****<****-****>**** UPF**
+
+| sudo journalctl -u open5gs-sgwcd -n 20 --no-pager │ grep -E 'PFCP│CONNECTED│ERROR' |
+| --- |
+| sudo journalctl -u open5gs-sgwud -n 20 --no-pager │ grep -E 'PFCP│CONNECTED│ERROR' |
+| sudo journalctl -u open5gs-smfd  -n 20 --no-pager │ grep -E 'PFCP│CONNECTED│ERROR' |
+| sudo journalctl -u open5gs-upfd  -n 20 --no-pager │ grep -E 'PFCP│CONNECTED│ERROR' |
+
+### **Bloc 4 — NAT sortant pour trafic UE**
+
+| sudo iptables -t nat -A POSTROUTING -s 10.45.0.0/16 ! -o ogstun -j MASQUERADE |
+| --- |
+| sudo sysctl -w net.ipv4.ip_forward=1 |
+| echo "net.ipv4.ip_forward=1" │ sudo tee -a /etc/sysctl.conf |
+| sudo iptables-save │ grep MASQUERADE |
+
+### **Bloc 5 — Firewall ports eNodeB**
+
+| sudo ufw allow 36412/sctp comment 'S1AP eNodeB MME' |
+| --- |
+| sudo ufw allow 2152/udp   comment 'GTP-U S1-U' |
+| sudo ufw allow 2123/udp   comment 'GTP-C S11' |
+| sudo ufw status │ grep -E '36412│2152│2123' |
+
+### **Readiness check final Open5GS**
+
+| echo '========== OPEN5GS READINESS CHECK ==========' |
+| --- |
+| ok=0 |
+| for svc in mongod open5gs-hssd open5gs-pcrfd open5gs-sgwcd \ |
+| open5gs-sgwud open5gs-smfd open5gs-upfd open5gs-mmed; do |
+| [ "$(systemctl is-active $svc)" = 'active' ] && ok=$((ok+1)) |
+| done |
+| echo "Services actifs      : $ok/8" |
+| sudo ss -tlnp │ grep -q 36412 && echo 'Port S1AP 36412 : OUVERT' ││ echo 'Port S1AP 36412 : FERME' |
+| sudo ss -ulnp │ grep -q 2123  && echo 'Port GTP-C 2123 : OUVERT' ││ echo 'Port GTP-C 2123 : FERME' |
+| sudo ss -ulnp │ grep -q 2152  && echo 'Port GTP-U 2152 : OUVERT' ││ echo 'Port GTP-U 2152 : FERME' |
+| sudo ss -tlnp │ grep -q 3868  && echo 'Port Diameter   : OUVERT' ││ echo 'Port Diameter   : FERME' |
+| ip link show ogstun │ grep -q 'UP' && echo 'ogstun          : UP'   ││ echo 'ogstun          : DOWN' |
+| [ "$(cat /proc/sys/net/ipv4/ip_forward)" = '1' ] && echo 'IP forward      : OUI'  ││ echo 'IP forward      : NON' |
+| sudo iptables -t nat -L POSTROUTING │ grep -q MASQUERADE && echo 'NAT MASQUERADE  : OK'  ││ echo 'NAT MASQUERADE  : MANQUANT' |
+| echo '==============================================' |
+
+### **Surveillance connexion eNodeB en temps reel**
+
+| sudo journalctl -u open5gs-mmed -f │ grep -E 'S1AP│eNB│ATTACH│ERROR' |
+| --- |
+
+# **RECAP GLOBAL — Tous les PLACEHOLDERs**
+
+Tous les tokens ci-dessous doivent etre substitues par les valeurs definitives avant mise en service.
+
+| **Token** | **Valeur / Description** |
+| --- | --- |
+| PLACEHOLDER (MNC) | Mobile Network Code  ex: 10 |
+| PLACEHOLDER_IP | IP serveur — deja 10.0.0.1 dans cette install |
+| PLACEHOLDER_BAND | Bande radio : DCS1800 ou GSM900 |
+| PLACEHOLDER_ARFCN_S1 | ARFCN secteur 1 — delivre par autorite de regulation |
+| PLACEHOLDER_ARFCN_S2 | ARFCN secteur 2 — delivre par autorite de regulation |
+| PLACEHOLDER_ARFCN_S3 | ARFCN secteur 3 — delivre par autorite de regulation |
+| PLACEHOLDER_PWR_DBM | Puissance nominale TRX en dBm  ex: 23 |
+| PLACEHOLDER_KI | Cle Ki SIM 128 bits (32 hex) |
+| PLACEHOLDER_OPC | OPc SIM 128 bits (32 hex) |
+
+*Document genere automatiquement — Mai 2026 — Ubuntu 24.04 LTS — IP 10.0.0.1 — MCC 547 — Version 2.0*

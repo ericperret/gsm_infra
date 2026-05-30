@@ -1,0 +1,357 @@
+BSS MCC=547 — Master Site v1.1
+
+**OPÉRATEUR TÉLÉPHONIE MOBILE**
+
+Polynésie française — Réseau insulaire autonome
+
+MCC = 547  ·  Ubuntu 24.04 LTS
+
+**DOCUMENT MAÎTRE — SITE LOCAL**
+
+Définition · Hardware · Architecture · Stack · Installation · VoWiFi · BSS · Recette
+
+| **Paramètre** | **Valeur** |
+| --- | --- |
+| Version | 1.1.0 — 28/05/2026 |
+| Périmètre | PC d'un SITE insulaire (le serveur central fait l'objet du Master-Central) |
+| Sources mergées | operateur_polynesie_v3 · stack_operateur_polynesie · vowifi_stack_doc · bss_sync_guide · osmocom_open5gs_complet_v2 · OSMO_EPDG_BUILD_DEPLOY · scripts v1.1 |
+| Topologie | Option B : site 10.0.0.1..99 · central 10.0.0.250 · WireGuard 10.10.0.0/24 |
+| Variables d'entrée | MNC et SITE_LOCAL_IP : saisies en phase de personnalisation (voir §9) |
+
+## Journal des corrections — v1.1
+
+| **Correctif** | **Détail** |
+| --- | --- |
+| Chaîne ePDG | osmo-epdg = serveur GSUP pour strongSwan ; auth AKA via Diameter SWx vers HSS ; bearer via GTPv2-C (S2b) vers PGW |
+| Port GSUP | osmo-epdg déplacé sur 4223 (OsmoHLR garde 4222) — fin de la collision |
+| Data 2G | ajout d'osmo-ggsn (8e composant Osmocom) cohérent avec osmo-sgsn.cfg ; osmo-pcu embarqué sur la sysmoBTS |
+| Module noyau | module gtp requis et vérifié pour osmo-epdg (gtp_u_kmod) |
+| Service | création de l'unit systemd osmo-epdg autour de la release relx |
+| Erlang | version minimale rectifiée : OTP >= 25.2.3 (apt Ubuntu 24.04 = OTP 26, conforme) |
+| §9 PLACEHOLDER | sys.config ne contient PAS le MNC ; il contient des IP loopback à mapper sur SITE_LOCAL_IP |
+
+# 1. Définition du projet
+
+Opérateur de téléphonie mobile autonome pour les micro-îles de Polynésie française. Chaque île dispose d'une infrastructure locale complète (2G/4G/VoWiFi) fonctionnant sans WAN. Le serveur central (Tahiti) assure le hub WAN, le trunk PSTN OVH et la synchronisation BSS.
+
+| **Paramètre** | **Valeur** |
+| --- | --- |
+| Identifiant réseau | MCC = 547 · MNC = variable d'entrée (affecté ARCEP/ANFR) |
+| Zone de service | Polynésie française — archipels insulaires |
+| Technologie | 2G GSM/GPRS (Osmocom) + 4G LTE (Open5GS) + WiFi Calling (IMS/VoWiFi) |
+| Backhaul | Starlink par site (IP dynamique) · WireGuard hub-and-spoke |
+| Autonomie locale | Appels + SMS + WiFi Calling locaux sans WAN |
+| Interconnexion PSTN | FreeSWITCH + SIP trunk OVH Telecom (central) |
+| Urgences | 15/17/18/112 → PSAP Polynésie · DSCP EF · priorité absolue |
+| Alerte publique | FR-ALERT via OsmoCBC (Cell Broadcast) |
+| Profils abonnés | standard / autorisé / VIP |
+| SIM | sysmoISIM-SJA2 gravées localement via pySIM + SCR3310 |
+
+# 2. Hardware — Site local (chaque île)
+
+Chaque site est autonome. Le PC local héberge toute la stack logicielle. Radio : BTS 2G + chaîne BBU/RRU 4G.
+
+## 2.1 Radio 2G — sysmoBTS 2100
+
+| **Élément** | **Spécification** | **Fournisseur** | **Qté** |
+| --- | --- | --- | --- |
+| BTS 2G | sysmoBTS 2100 — Abis-over-IP — 3 secteurs 120° | shop.sysmocom.de | 2 |
+| Interface | Ethernet 100Base-T — Abis-over-IP :3003 | — | — |
+| Bande | PLACEHOLDER_BAND (DCS1800 ou GSM900) | ARCEP/ANFR | — |
+| ARFCN | PLACEHOLDER_ARFCN_S1/S2/S3 (3 secteurs) | Régulation | 3 |
+| Puissance TRX | PLACEHOLDER_PWR_DBM dBm | — | — |
+| Protocole | RSL/OML via Ethernet — contrôlé par OsmoBSC | — | — |
+
+*⚠ La sysmoBTS embarque osmo-pcu (contrôleur paquet GPRS). Aucune installation osmo-pcu sur le PC site.*
+
+## 2.2 Radio 4G LTE — BBU + 3×RRU Band 28
+
+| **Élément** | **Spécification** | **Fournisseur** |
+| --- | --- | --- |
+| BBU | Compatible Open5GS S1AP — CPRI/eCPRI vers RRU | À sélectionner — devis |
+| RRU | Band 28 — 700 MHz — 768 MHz DL centre — ×3 | À sélectionner — devis |
+| Fréquence B28 | DL 758–803 MHz · UL 703–748 MHz | ARCEP/ANFR |
+| Antenne 4G | Sectorielle 700 MHz / B28 — 65° H-BW — ×3 | À sélectionner |
+| Interface BBU↔PC | S1AP SCTP 36412 · GTP-U UDP 2152 · GTP-C UDP 2123 | — |
+
+*⚠ BBU/RRU Band 28 : modèle à confirmer (Baicells, Accelleran, Sercomm…). L**'**IP du BBU = PLACEHOLDER_IP (= SITE_LOCAL_IP) dans les configs Open5GS.*
+
+## 2.3 PC site local
+
+| **Composant** | **Spécification minimale** | **Note** |
+| --- | --- | --- |
+| CPU | x86_64 — 4 cœurs minimum | Intel/AMD — pas d'ARM |
+| RAM | 8 Go min (16 Go recommandé) | Osmocom + Open5GS + BSS |
+| Stockage | SSD 64 Go minimum | /var/lib/osmocom + PostgreSQL |
+| OS | Ubuntu 24.04 LTS x86_64 | Noble Numbat — LTS |
+| Réseau | 2× Ethernet | IP 10.0.0.x unique par île |
+| USB | USB 2.0/3.0 | Lecteur SCR3310 (gravure SIM) |
+
+## 2.4 Connectivité WAN
+
+| **Élément** | **Spécification** | **Fournisseur** |
+| --- | --- | --- |
+| Terminal Starlink | Standard ou Mini — 1 par site | starlink.com |
+| IP publique | Dynamique — le site initie le tunnel WireGuard | — |
+| Débit typique | 50–200 Mbps DL / 10–40 Mbps UL — ~40 ms | — |
+| Serveur central | IP publique fixe | OVH VPS ou Starlink Business |
+
+## 2.5 Alimentation et infrastructure physique
+
+| **Élément** | **Spécification** | **Note** |
+| --- | --- | --- |
+| Alimentation | 24V DC | Compatible sysmoBTS + BBU/RRU |
+| UPS | Autonomie ≥ 4h | Continuité en coupure réseau |
+| Pylône / mât | Hauteur selon couverture | Antennes 2G + 4G |
+| Câblage RF | Coaxial faible perte (LMR-400) | RRU ↔ antennes |
+| Boîtier | IP54 minimum | Climat tropical |
+| Terre | Obligatoire — protection foudre | Norme locale |
+
+# 3. Serveur central — renvoi
+
+Le serveur central (10.0.0.250 / WireGuard 10.10.0.1) héberge le hub WireGuard, FreeSWITCH (trunk OVH) et le BSS maître. Son installation détaillée est traitée dans le document Master-Central. Côté site, seule l'adresse CENTRAL_WAN_IP et la clé CENTRAL_WG_PUBKEY sont nécessaires (voir §9).
+
+# 4. Outillage gravure SIM
+
+| **Élément** | **Référence** | **Fournisseur** | **Usage** |
+| --- | --- | --- | --- |
+| SIM vierge | sysmoISIM-SJA2 (EAP-AKA) | shop.sysmocom.de | 1/abonné |
+| Lecteur SIM | SCR3310 USB | Amazon / IT | 1/PC |
+| Logiciel | pySIM (gitea.osmocom.org) | Osmocom | PC Ubuntu |
+| Gravé | IMSI · Ki · OPC · ICCID · MCC=547 · MNC | — | par SIM |
+
+# 5. Architecture réseau
+
+## 5.1 Plans d'adressage
+
+| **Réseau** | **Plage** | **Usage** |
+| --- | --- | --- |
+| LAN opérateur | 10.0.0.0/24 | PC sites (10.0.0.1..99) + central (10.0.0.250) |
+| Tunnel WireGuard | 10.10.0.0/24 | central=10.10.0.1, site N=10.10.0.(N+1) |
+| Data abonnés 4G | 10.45.0.0/16 | Sous-réseau ogstun Open5GS |
+
+| **Nœud** | **IP LAN** | **IP WireGuard** | **Starlink** |
+| --- | --- | --- | --- |
+| Serveur Central | 10.0.0.250 | 10.10.0.1 | IP fixe |
+| Site Île 1 | 10.0.0.1 | 10.10.0.2 | dynamique |
+| Site Île 2 | 10.0.0.2 | 10.10.0.3 | dynamique |
+| Site Île N | 10.0.0.N | 10.10.0.(N+1) | dynamique |
+
+## 5.2 Mode dégradé (WAN absent)
+
+✓ Appels locaux inter-abonnés disponibles sans serveur central.
+
+✓ WiFi Calling local disponible sans serveur central (Open5GS SMF/UPF locaux assurent le bearer).
+
+*⚠ Appels PSTN/internationaux suspendus jusqu**'**au retour WAN.*
+
+*⚠ Kamailio détecte la coupure WireGuard par ping toutes les 10 s — bascule automatique.*
+
+# 6. Stack logicielle complète
+
+## 6.1 PC site local
+
+| **Composant** | **Port(s)** | **Source** | **Rôle** |
+| --- | --- | --- | --- |
+| OsmoSTP | TCP 2905 M3UA · 4239 VTY | sysmocom | Routage SS7 |
+| OsmoHLR | TCP 4222 GSUP · 4258 VTY | sysmocom | Registre abonnés (2G core) |
+| OsmoMGW | UDP 2427 MGCP · 4245 VTY | sysmocom | Passerelle voix |
+| OsmoMSC | TCP 4254 VTY | sysmocom | Commutation voix + SMS |
+| OsmoSGSN | TCP 4242 VTY · NS UDP 23000 | sysmocom | Plan paquet GPRS 2G |
+| OsmoGGSN | GTP-C 2123 / GTP-U 2152 (loopback) · APN data | sysmocom | Passerelle data GPRS → Internet |
+| OsmoBSC | TCP 3003 Abis · 4241 VTY | sysmocom | Contrôleur BTS |
+| OsmoCBC | TCP 4264 CBSP | sysmocom | FR-ALERT Cell Broadcast |
+| Open5GS (×16) | SCTP 36412 · UDP 2123/2152 · TCP 3868 | acetcom | Cœur 4G LTE (+ SMF/PGW & HSS utilisés par la VoWiFi) |
+| strongSwan-epdg | UDP 500/4500 IKEv2 | fork Osmocom | IPsec EAP-AKA (terminaison côté téléphone) |
+| osmo-epdg | TCP 4223 GSUP (serveur) · SWx 3868 · GTP-C 2123 · module noyau gtp | Erlang/relx (gerrit) | ePDG : sert strongSwan, auth SWx→HSS, bearer S2b→PGW |
+| Kamailio IMS | TCP/UDP 5060 SIP | kamailio.org | S-CSCF/P-CSCF |
+| dnsmasq | UDP 53 DNS | apt Ubuntu | Résolution ePDG Android |
+| WireGuard | UDP 51820 | kernel Ubuntu | VPN → hub central |
+| PostgreSQL | TCP 5432 | apt Ubuntu | BSS local |
+| BSS API (Node.js) | TCP 3000 | server.js | API REST + sync |
+
+*⚠ osmo-epdg n**'**utilise PAS l**'**HLR : OsmoHLR (GSUP 4222) sert le cœur 2G (MSC/SGSN). L**'**ePDG écoute sur 4223 pour strongSwan et authentifie via Diameter SWx vers le HSS Open5GS — à valider au banc que le HSS Open5GS répond bien en SWx ; à défaut, prévoir un AAA SWx dédié.*
+
+## 6.2 Serveur central (rappel)
+
+| **Composant** | **Port(s)** | **Rôle** |
+| --- | --- | --- |
+| WireGuard (hub) | UDP 51820 | Agrège tous les sites |
+| FreeSWITCH internal | TCP 5060 | SIP sites via WireGuard |
+| FreeSWITCH external | TCP 5080 | SIP trunk OVH PSTN |
+| PostgreSQL (maître) | TCP 5432 | Base BSS maître |
+| BSS API (CENTRAL) | TCP 3000 | Hub sync /api/sync/* |
+
+# 7. Flux d'appel
+
+## 7.1 Appel local (2G/4G)
+
+Téléphone → sysmoBTS / BBU → OsmoBSC / Open5GS MME → OsmoMSC → OsmoHLR (authentification) → livraison vers l'abonné local enregistré.
+
+## 7.2 WiFi Calling (VoWiFi)
+
+| **Étape** | **Élément** | **Protocole / détail** |
+| --- | --- | --- |
+| 1. DNS | dnsmasq :53 | epdg.epc.mncXXX.mcc547.pub.3gppnetwork.org → SITE_LOCAL_IP |
+| 2. IKEv2 | strongSwan :500/:4500 | EAP-AKA — authentification SIM |
+| 3. CEIA | strongSwan → osmo-epdg :4223 | GSUP/IPA — strongSwan client, osmo-epdg serveur |
+| 4. Auth AKA | osmo-epdg → HSS :3868 | Diameter SWx — vecteurs EAP-AKA |
+| 5. Bearer | osmo-epdg → PGW :2123 (S2b) | GTPv2-C + GTP-U (module gtp) — IP + P-CSCF au téléphone |
+| 6. SIP | Kamailio IMS :5060 | REGISTER dans le tunnel ESP |
+| 7a. Local | Kamailio → abonné | lookup(location) direct |
+| 7b. PSTN WAN UP | Kamailio → WG → FreeSWITCH → OVH | SIP + G711 |
+| 7c. PSTN WAN DOWN | Kamailio → 503 | bascule auto en 10 s |
+
+*⚠ Étapes 4 et 5 corrigées en v1.1 : l**'**authentification ne passe pas par l**'**HLR en GSUP mais par Diameter SWx vers le HSS, et le bearer data (l**'**IP du téléphone) est établi par GTPv2-C/S2b vers le PGW. Sans le PGW joignable et le module noyau gtp chargé, l**'**enregistrement SIP ne peut pas aboutir.*
+
+## 7.3 Urgences PSAP
+
+*⚠ Numéros d**'**urgence TOUJOURS disponibles quel que soit le profil ou l**'**état du WAN.*
+
+| **Numéro** | **Destination PSAP** | **Codec** | **QoS DSCP** |
+| --- | --- | --- | --- |
+| 15 | SAMU +68915 | PCMA forcé | EF = 46 |
+| 17 | Police +68917 | PCMA forcé | EF = 46 |
+| 18 | Pompiers +68918 | PCMA forcé | EF = 46 |
+| 112 | → SAMU +68915 | PCMA forcé | EF = 46 |
+
+# 8. BSS — Base de données et synchronisation
+
+## 8.1 Schéma PostgreSQL
+
+| **Table** | **Description** | **Contrainte notable** |
+| --- | --- | --- |
+| OPERATEURS | Référentiel MCC/MNC | mcc=547, mnc unique |
+| ABONNES | Titulaires de contrat | ile, archipel, id_site, statut |
+| SIMS | SIM physiques et eSIM | imsi commence par 547, ki_hash SHA-512 |
+| NUMEROS | MSISDN E.164 +689 | QUARANTAINE 90j post-résiliation |
+| PROFILS | Offres/forfaits | rattaché à id_abonne, id_site |
+| EVENEMENTS | CDR et journaux | id_site = site émetteur |
+| ALERTES_CBS | FR-ALERT Cell Broadcast | statut, périmètre géographique |
+| SITES | Nœuds sync multi-sites | ip_wg, ip_locale, sync_token |
+| SYNC_QUEUE | File d'attente persistée | écritures locales non synchées |
+| SYNC_LOG | Journal des sessions sync | une ligne par cycle push/pull |
+
+## 8.2 Synchronisation multi-sites
+
+| **Phase** | **Sens** | **Fréquence** | **Description** |
+| --- | --- | --- | --- |
+| PUSH | Site → Central | 120 s | Envoie la SYNC_QUEUE locale |
+| PULL | Central → Site | 120 s | Reçoit les updates depuis la dernière sync |
+
+| **Route API (central)** | **Méthode** | **Rôle** |
+| --- | --- | --- |
+| /api/sync/push | POST | Reçoit un batch du site |
+| /api/sync/pull | GET | Retourne les updates depuis ?since= |
+| /api/sync/status | GET | État global des syncs |
+
+# 9. Variables d'entrée et PLACEHOLDERs
+
+*⚠ MNC et SITE_LOCAL_IP sont des variables d**'**entrée saisies en phase de personnalisation. Rien ne fonctionne tant que le MNC n**'**est pas affecté. Bloquer la mise en service jusqu**'**à l**'**affectation officielle ARCEP/ANFR.*
+
+| **Token** | **Valeur attendue** | **Fichiers concernés** | **Prio** |
+| --- | --- | --- | --- |
+| MNC | ex. 020 — ARCEP/ANFR | dnsmasq.conf, kamailio.cfg, swanctl.conf, open5gs/mme.yaml, osmo-*.cfg, sim_graver.sh | CRIT |
+| SITE_LOCAL_IP | IP LAN du PC site (10.0.0.x) | sys.config (ePDG), osmo-sgsn.cfg, osmo-bsc.cfg, strongSwan osmo_epdg_ue.c, open5gs/*.yaml, 04_install_sync.sh | CRIT |
+| PLACEHOLDER_IP | = SITE_LOCAL_IP pour Open5GS | open5gs/*.yaml (MME/SGW/PGW/HSS/PCRF/SMF/UPF) | CRIT |
+| CENTRAL_WAN_IP | IP publique fixe du central | wg0.conf sur chaque site | Imp |
+| CENTRAL_WG_PUBKEY | Clé publique WG du central | wg0.conf sur chaque site | Imp |
+| PLACEHOLDER_BAND | DCS1800 ou GSM900 | osmo-bsc.cfg | Radio |
+| PLACEHOLDER_ARFCN_S1/2/3 | ARFCNs secteurs | osmo-bsc.cfg | Radio |
+| PLACEHOLDER_PWR_DBM | Puissance TRX (dBm) | osmo-bsc.cfg | Radio |
+| PLACEHOLDER_KI / OPC | clés 128 bits (32 hex) | pySIM, open5gs-dbctl | SIM |
+| IMSI | 547 + MNC + n° abonné (15 ch.) | pySIM, HSS | SIM |
+
+*⚠ sys.config (osmo-epdg) ne contient PAS le MNC : son MNC provient du realm Diameter/HSS. En revanche il contient des IP en loopback (gsup_local_ip, dia_swx_remote_ip, dia_s6b_local_ip, gtpc_local_ip/remote_ip, socket gtp_u_kmod) à mapper sur SITE_LOCAL_IP, l**'**IP du PGW et celle du HSS lors de la personnalisation.*
+
+# 10. Phases d'installation
+
+*⚠ Chaque prompt dans une conversation séparée et neuve. Ordre strict — dépendances entre phases.*
+
+| **Bloc** | **Prompt** | **Sujet** | **Prérequis** |
+| --- | --- | --- | --- |
+| Osmocom 2G | 1 | Préparation système Ubuntu 24.04 | OS installé |
+| Osmocom 2G | 2 | Installation 8 composants (+ osmo-ggsn) | Dépôt sysmocom OK |
+| Osmocom 2G | 3 | Configuration MCC=547 / MNC | Composants installés |
+| Osmocom 2G | 4 | Démarrage services systemd | Configs écrits |
+| Osmocom 2G | 5 | OsmoBSC sysmoBTS — 3 secteurs | Services actifs |
+| Osmocom 2G | 6 | Vérif Abis :3003 + GGSN/SGSN | OsmoBSC configuré |
+| Open5GS 4G | 7-1..7-5 | Dépôt + 16 composants → MME/SGW/PGW/HSS → vérif S1AP | Osmocom 2G OK |
+| SIM | 8-1..8-3 | pySIM + SCR3310 → gravure → vérif | — |
+| VoWiFi | 9-1 | strongSwan fork Osmocom (--enable-osmo-epdg) | Open5GS HSS/PGW actifs |
+| VoWiFi | 9-2 | osmo-epdg : Erlang ≥25.2.3, rebar3 release, unit systemd, module gtp | strongSwan actif |
+| VoWiFi | 9-3 | Kamailio IMS | osmo-epdg :4223 actif |
+| VoWiFi | 9-4 | Kamailio → OsmoMSC → WAN | Kamailio actif |
+| VoWiFi | 9-5 | Vérification E2E | Stack complète |
+| Nagios | 12-1..12-3 | Installation → sondes → alertes SMS | — |
+| BSS | 13-1..13-3 | PostgreSQL+schéma → API Node.js → admin HTML/CSS/JS | — |
+
+*⚠ FreeSWITCH (prompts 10) et WireGuard hub (prompts 11) concernent le serveur central : voir le Master-Central.*
+
+# 11. Fiche de recette — check_recette_site.sh
+
+Le script vérifie de façon autonome tous les composants du site et produit un verdict PASS/FAIL.
+
+sudo bash check_recette_site.sh    # résultat dans /tmp/recette_10.0.0.x.log
+
+## 11.1 Périmètre de vérification
+
+| **Section** | **Éléments vérifiés** | **Méthode** |
+| --- | --- | --- |
+| Osmocom 2G | stp/hlr/mgw/msc/sgsn/ggsn/bsc/cbc (8) | systemctl is-active |
+| Open5GS 4G | 16 composants MME/SGW/PGW/HSS/PCRF/NRF/… | systemctl is-active |
+| VoWiFi | charon-systemd, osmo-epdg, kamailio, dnsmasq | systemctl is-active |
+| Infra | postgresql, bss-api, wg0, ogstun | systemctl + ip link |
+| Module noyau | module gtp chargé (pour osmo-epdg) | lsmod │ grep gtp |
+| Ports Osmocom | 4222 (HLR GSUP), 3003 (Abis), 4264 (CBS), 2905 (M3UA), 23000 (NS) | ss -tlnp/ulnp |
+| Ports Open5GS | 36412 (S1AP), 2123 (GTP-C), 2152 (GTP-U), 3868 (Diameter) | ss -tlnp/ulnp |
+| Ports VoWiFi | 4223 (ePDG GSUP), 500/4500 (IKEv2), 5060 (SIP), 53 (DNS) | ss -tlnp/ulnp |
+| Liens ePDG | SWx 3868 (→HSS) joignable, GTP-C 2123 (→PGW) | nc / ss |
+| Ports infra | 5432 (PostgreSQL), 3000 (BSS API), 51820 (WireGuard) | ss -tlnp/ulnp |
+| Pings | 127.0.0.1, SITE_LOCAL_IP, 10.10.0.1 (hub WG) | ping -c1 -W2 |
+| Fonctionnel | BSS API health, DNS ePDG, VTY OsmoHLR | curl, dig, nc |
+| Système | IP forward, NAT ogstun, MNC défini, disk, RAM | sysctl, iptables, grep |
+
+## 11.2 Interprétation
+
+| **Verdict** | **Condition** | **Action** |
+| --- | --- | --- |
+| PASS | Tous les checks = OUI | Site opérationnel — recette validée |
+| FAIL | Au moins 1 check = NON | Corriger les anomalies — relancer le script |
+
+*⚠ Les checks DNS ePDG et SWx restent NON tant que MNC = variable d**'**entrée non affectée. Normal avant personnalisation.*
+
+# 12. Diagnostic rapide
+
+| **Symptôme** | **Commande** | **Cause probable** |
+| --- | --- | --- |
+| VoWiFi ne connecte pas | dig epdg.epc.mncXXX.mcc547.pub.3gppnetwork.org @SITE_LOCAL_IP | MNC non affecté ou dnsmasq arrêté |
+| Tunnel IKEv2 KO | journalctl -u charon-systemd -n 50 | CEIA non connecté / cert |
+| CEIA non connecté | journalctl -u osmo-epdg -n 50 | Erlang arrêté, port 4223, ou MNC/realm |
+| Auth AKA échoue | journalctl -u osmo-epdg │ grep -i swx | HSS 3868 injoignable / pas de SWx |
+| Bearer ePDG KO | lsmod │ grep gtp ; ss -ulnp │ grep 2123 | module gtp absent ou PGW injoignable |
+| SIP non enregistré | kamcmd ul.dump | tunnel/bearer non établi |
+| sysmoBTS non connectée | journalctl -u osmo-bsc -f │ grep OML | port 3003 / IP incorrecte |
+| MME ne répond pas | ss -ulnp │ grep 36412 | BBU/eNodeB — SCTP 36412 |
+| WireGuard DOWN | wg show wg0 | Starlink KO / clé incorrecte |
+| Sync BSS KO | curl http://127.0.0.1:3000/api/sync/status | WireGuard DOWN ou token mismatch |
+
+## 12.1 Logs utiles
+
+journalctl -u charon-systemd -f     # IKEv2 / EAP-AKA
+
+journalctl -u osmo-epdg -f          # CEIA / SWx / S2b / Erlang
+
+journalctl -u kamailio -f           # SIP routing
+
+journalctl -u osmo-bsc -f           # OML/Abis sysmoBTS
+
+journalctl -u open5gs-mmed -f       # S1AP eNodeB/BBU
+
+journalctl -u open5gs-smfd -f       # bearer S2b ePDG
+
+wg show wg0                         # état WireGuard
+
+curl http://127.0.0.1:3000/api/health   # BSS API
+
+28/05/2026 — Confidentiel usage interne — page
