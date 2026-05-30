@@ -3,13 +3,7 @@
 Infrastructure complète open-source pour opérateur mobile insulaire :
 2G GSM (Osmocom) + 4G LTE (Open5GS) + VoWiFi (strongSwan/osmo-epdg/Kamailio) + BSS.
 
----
 
-## Par où commencer
-
-Lire **`PROMPTS_LIST.md`** — il contient les 27 prompts d'installation dans l'ordre strict,
-organisés en 8 phases. 
----
 
 ## Fichiers de ce dépôt
 
