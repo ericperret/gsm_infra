@@ -1,0 +1,40 @@
+# ==============================================================================
+#  Nom / Name : CITATION.cff
+#  Projet     : gsm_infra — https://github.com/ericperret/gsm_infra
+#  Auteur     : Eric PERRET
+#  Date       : 2026-10-27
+#  Version    : 1.0
+#  Objet      : métadonnées de citation (bouton « Cite this repository » de GitHub)
+#  Licence    : CC BY-NC 4.0 — usage commercial sur autorisation écrite (eperret@azs.fr)
+# ==============================================================================
+cff-version: 1.2.0
+message: "If you use or cite this work, please credit it as below. / Merci de citer ce travail comme ci-dessous."
+type: software
+title: "gsm_infra — open-source island mobile operator stack"
+abstract: "Open-source mobile operator stack for an island network (MCC 547, French Polynesia): 2G GSM Osmocom, 4G LTE Open5GS, VoWiFi (strongSwan, osmo-epdg, Kamailio), BSS database and multi-site sync."
+authors:
+  - family-names: "PERRET"
+    given-names: "Eric"
+    email: "eperret@azs.fr"
+repository-code: "https://github.com/ericperret/gsm_infra"
+url: "https://github.com/ericperret/gsm_infra"
+license: CC-BY-NC-4.0
+date-released: "2026-10-27"
+keywords:
+  - osmocom
+  - open5gs
+  - gsm
+  - lte
+  - 4g
+  - 2g
+  - vowifi
+  - epdg
+  - ims
+  - kamailio
+  - strongswan
+  - telecom
+  - mobile-network
+  - core-network
+  - bss
+  - postgresql
+  - french-polynesia
